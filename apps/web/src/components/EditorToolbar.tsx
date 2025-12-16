@@ -80,7 +80,13 @@ export function EditorToolbar() {
       if (data.success && data.downloadUrl) {
         // Trigger download
         const link = window.document.createElement("a");
-        link.href = data.downloadUrl;
+        // Ensure absolute URL by prepending backend host if needed
+        const apiUrl = import.meta.env.VITE_API_URL || "";
+        const fullUrl = data.downloadUrl.startsWith("http")
+          ? data.downloadUrl
+          : `${apiUrl}${data.downloadUrl}`;
+
+        link.href = fullUrl;
         link.download = `edited-${pdfFile?.name || "document.pdf"}`;
         window.document.body.appendChild(link);
         link.click();
