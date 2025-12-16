@@ -20,7 +20,7 @@ services:
     environment:
       - PDF_SERVICE_URL=http://pdf-service:3002
       - PORT=3001
-      - CORS_ORIGIN=https://your-frontend-domain.com
+      - CORS_ORIGIN=https://mytools-web.vercel.app
       # Add other env vars here or use env_file
     depends_on:
       - pdf-service
