@@ -3,3 +3,4 @@ pikepdf>=9.0.0
 fastapi>=0.115.0
 uvicorn>=0.32.0
 python-multipart>=0.0.18
+weasyprint>=63.0

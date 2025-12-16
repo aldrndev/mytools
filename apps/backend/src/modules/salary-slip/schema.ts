@@ -6,6 +6,8 @@ import {
   DeductionsConfigSchema,
   PayrollPeriodSchema,
   TemplateIdSchema,
+  SlipThemeSchema,
+  OrientationSchema,
 } from "@pdf-editor/shared";
 
 // Request Schemas
@@ -16,6 +18,8 @@ export const GenerateSalarySlipBodySchema = z.object({
   earnings: EarningsSchema,
   deductionsConfig: DeductionsConfigSchema,
   templateId: TemplateIdSchema,
+  theme: SlipThemeSchema.default("default"),
+  orientation: OrientationSchema.default("portrait"),
 });
 
 export type GenerateSalarySlipBody = z.infer<

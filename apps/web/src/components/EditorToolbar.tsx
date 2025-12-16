@@ -8,7 +8,9 @@ import {
   Edit3,
   CheckCircle,
   X,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editorStore";
 import { editPdf, type EditRequest } from "@/services/api";
@@ -35,18 +37,32 @@ export function EditorToolbar() {
     mutationFn: async () => {
       if (!document) throw new Error("No document loaded");
 
-      const edits: EditRequest["edits"] = modifiedItems.map((item) => ({
-        textItemId: item.id,
-        pageIndex: item.pageIndex,
-        originalText: item.originalText,
-        newText: item.text,
-        x: item.x,
-        y: item.y,
-        width: item.width,
-        height: item.height,
-        fontSize: item.fontSize,
-        fontName: item.fontName,
-      }));
+      const edits: EditRequest["edits"] = modifiedItems.map((item) => {
+        // Calculate shift based on exact width from PDF data
+        // We avoid custom estimations and rely on the reported width relative to character count
+        let shift = 0;
+        const originalLength = item.originalText.length;
+        const newLength = item.text.length;
+
+        if (originalLength > 0 && item.width > 0) {
+          const avgCharWidth = item.width / originalLength;
+          shift = (newLength - originalLength) * avgCharWidth;
+        }
+
+        return {
+          textItemId: item.id,
+          pageIndex: item.pageIndex,
+          originalText: item.originalText,
+          newText: item.text,
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          fontName: item.fontName,
+          shift: shift, // Send calculated shift to backend
+        };
+      });
 
       const response = await editPdf({
         documentId: document.id,
@@ -90,6 +106,12 @@ export function EditorToolbar() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         {/* File Info */}
         <div className="flex items-center gap-3">
+          <Link
+            to="/"
+            className="p-2 -ml-2 rounded-xl text-dark-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
           <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
             <Edit3 className="w-5 h-5 text-primary-400" />
           </div>

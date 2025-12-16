@@ -7,11 +7,13 @@ import { fileURLToPath } from "node:url";
 import { config } from "./config/index.js";
 import { pdfRoutes } from "./modules/pdf/routes.js";
 import { salarySlipRoutes } from "./modules/salary-slip/routes.js";
+import { startCleanupJob } from "./jobs/cleanup.job.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildApp() {
   const fastify = Fastify({
+    bodyLimit: 50 * 1024 * 1024, // 50MB limit
     logger: {
       level: "info",
       transport: {
@@ -62,6 +64,9 @@ async function start() {
       port: config.port,
       host: config.host,
     });
+
+    // Start background jobs
+    startCleanupJob();
 
     console.log(`🚀 Server running at http://localhost:${config.port}`);
 

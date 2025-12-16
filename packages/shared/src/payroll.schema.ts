@@ -157,18 +157,48 @@ export const SalarySlipDataSchema = z.object({
 
 export type SalarySlipData = z.infer<typeof SalarySlipDataSchema>;
 
-export const TemplateIdSchema = z.enum([
-  "modern",
-  "classic",
-  "minimal",
-  "indonesian",
+export const SlipThemeSchema = z.enum([
+  "default",
+  "blue",
+  "green",
+  "dark",
+  "red",
+  "gold",
+  "grey",
+  "orange",
+  "navy",
+  "monochrome",
 ]);
 
+export type SlipTheme = z.infer<typeof SlipThemeSchema>;
+
+export const OrientationSchema = z.enum(["portrait", "landscape"]);
+
+export type Orientation = z.infer<typeof OrientationSchema>;
+
+// Template & Theme Types
+export const TemplateIdSchema = z.enum([
+  "formal_standar",
+  "formal_bordered",
+  "formal_compact",
+  "formal_detailed",
+  "formal_executive",
+  "formal_simple",
+  "formal_corporate",
+  "formal_classic",
+  "formal_clean",
+  "formal_professional",
+  "formal_elegant",
+  "formal_business",
+  "formal_structured",
+]);
 export type TemplateId = z.infer<typeof TemplateIdSchema>;
 
 export const GenerateSalarySlipRequestSchema = z.object({
   data: SalarySlipDataSchema,
   templateId: TemplateIdSchema,
+  theme: SlipThemeSchema.default("default"),
+  orientation: OrientationSchema.default("portrait"),
 });
 
 export type GenerateSalarySlipRequest = z.infer<

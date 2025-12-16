@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { FileEdit, Sparkles, Shield, Zap } from "lucide-react";
 import { useEditorStore } from "@/stores/editorStore";
@@ -6,10 +6,20 @@ import { PdfUploader } from "@/components/PdfUploader";
 import { PdfViewer } from "@/components/PdfViewer";
 import { EditorToolbar } from "@/components/EditorToolbar";
 import { EditsSidebar } from "@/components/EditsSidebar";
+import { TutorialModal } from "@/components/TutorialModal";
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 export function EditorPage() {
   const { document, pdfFile, isLoading, password } = useEditorStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    if (pdfFile) {
+      setShowTutorial(true);
+    }
+  }, [pdfFile]);
 
   // Drag scrolling state
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -57,11 +67,19 @@ export function EditorPage() {
         <header className="py-6 px-8 border-b border-dark-700/50">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <Link
+                to="/"
+                className="p-2 -ml-2 rounded-xl text-dark-400 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </Link>
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
                 <FileEdit className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">PDF Editor</h1>
+                <h1 className="text-xl font-bold text-white">
+                  Bank Statement Editor
+                </h1>
                 <p className="text-xs text-dark-400">
                   Edit documents while preserving format
                 </p>
@@ -78,11 +96,11 @@ export function EditorPage() {
             className="text-center mb-12"
           >
             <h2 className="text-4xl font-bold text-white mb-4">
-              Edit Your PDF Documents
+              Edit Your Bank Statements
             </h2>
             <p className="text-lg text-dark-300 max-w-xl mx-auto">
-              Upload bank statements, salary slips, or any PDF document. Edit
-              text directly while preserving the original format.
+              Upload bank statements to start editing. Edit text directly while
+              preserving the original format.
             </p>
           </motion.div>
 
@@ -140,6 +158,10 @@ export function EditorPage() {
           <div className="min-w-full min-h-full w-fit flex items-center justify-center mx-auto pointer-events-none">
             <div className="pointer-events-auto">
               <PdfViewer file={pdfFile} password={password} />
+              <TutorialModal
+                isOpen={showTutorial}
+                onClose={() => setShowTutorial(false)}
+              />
             </div>
           </div>
         </div>

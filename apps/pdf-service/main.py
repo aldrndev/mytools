@@ -1,39 +1,31 @@
-"""
-PDF Editing Microservice - Content Stream Modification V14
-Approach: Td Operator Wrapper.
-Shifts cursor LEFT using 'Td' before drawing text to achieve Right Alignment.
-Restores cursor RIGHT using 'Td' after to maintain stream integrity.
-"""
-import io
-import json
-from typing import List, Optional, Set, Dict
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+import uvicorn
 import pikepdf
-from pikepdf import Pdf
+import json
+import io
+import logging
+from typing import List, Dict, Optional, Tuple
 
-app = FastAPI(title="PDF Editor Service", version="14.0.0")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("pdf_service")
+
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 class EditOperation:
     def __init__(self, data: dict):
         self.page_index = data.get("pageIndex", 0)
         self.original_text = data.get("originalText", "")
         self.new_text = data.get("newText", "")
-        self.font_size = data.get("fontSize", 10.0)
-        self.x = data.get("x", 0)
-        self.y = data.get("y", 0)
-        self.width = data.get("width", 0.0) # Original text width in PDF points
-        self.match_index = data.get("matchIndex", 0)  # Which occurrence to replace
 
 
 def get_raw_bytes(obj) -> bytes:
@@ -51,297 +43,221 @@ def decode_for_match(raw: bytes) -> str:
         return raw.decode('utf-8', errors='replace')
 
 
-def replace_preserving_encoding(original_bytes: bytes, old_text: str, new_text: str) -> Optional[bytes]:
-    decoded = decode_for_match(original_bytes)
-    if old_text not in decoded:
-        return None
+def get_font_width_map(font_obj) -> Dict[int, int]:
+    """
+    Extracts char_code -> width map from a PDF Font object.
+    """
     try:
-        old_bytes = old_text.encode('latin-1')
-        new_bytes = new_text.encode('latin-1')
-        byte_start = original_bytes.find(old_bytes)
-        if byte_start != -1:
-            return (
-                original_bytes[:byte_start] +
-                new_bytes +
-                original_bytes[byte_start + len(old_bytes):]
-            )
-    except:
-        pass
-    return None
-
-
-
-
-def calculate_visual_shift(old_text: str, new_text: str, font_size: float, original_width: float = 0.0) -> float:
-    """
-    Calculate visual shift to maintain RIGHT alignment.
-    Uses correction factor to account for variable character widths.
-    """
-    diff_chars = len(new_text) - len(old_text)
-    
-    if diff_chars == 0:
-        return 0.0
-    
-    # Correction factor: 1.0 = full shift based on avg char width
-    CORRECTION_FACTOR = 1.0
-    
-    if original_width > 0 and len(old_text) > 0:
-        avg_char_width = original_width / len(old_text)
-        shift_points = diff_chars * avg_char_width * CORRECTION_FACTOR
-        print(f"Shift: diff={diff_chars}, avgWidth={avg_char_width:.2f}pt, factor={CORRECTION_FACTOR}, shift={shift_points:.2f}pt")
-    else:
-        char_width_em = 0.45
-        shift_points = diff_chars * char_width_em * font_size * CORRECTION_FACTOR
-        print(f"Shift (fallback): diff={diff_chars}, shift={shift_points:.2f}pt")
-    
-    return shift_points
-
-
-def replace_text_in_content_stream(
-    pdf,
-    page,
-    ops: List[EditOperation]
-) -> bool:
-    """
-    Replace text using wrapper Td (Move) operators.
-    Uses Y-coordinate matching for precise duplicate handling.
-    """
-    modified = False
-    
-    # Get page height for Y-coordinate conversion
-    # pdfjs sends canvas Y (from top), pikepdf tracks PDF Y (from bottom)
-    page_height = 0.0
-    try:
-        media_box = page.MediaBox
-        page_height = float(media_box[3]) - float(media_box[1])
-    except:
-        page_height = 800.0  # Fallback
+        if "/Widths" not in font_obj:
+            return {}
         
-    print(f"Page height: {page_height}")
-    
-    # Diagnostic: collect all text found on this page
-    all_texts_found = []
-    
-    # Create map: original_text -> List[EditOperation]
-    edit_map: Dict[str, List[EditOperation]] = {}
-    for op in ops:
-        if op.original_text and op.new_text:
-            if op.original_text not in edit_map:
-                edit_map[op.original_text] = []
-            edit_map[op.original_text].append(op)
-            # Debug: print what we're looking for
-            print(f"Looking for '{op.original_text}' -> '{op.new_text}' at canvas_y={op.y:.1f}")
-    
-    # Track which edits have been applied (by id)
-    applied_edits: Set[int] = set()
-    
-    # Track current text position (Y coordinate in PDF space - from bottom)
-    current_y = 0.0
-    
-    # Y-tolerance for matching (in points)
-    Y_TOLERANCE = 15.0
+        widths = font_obj["/Widths"]
+        first_char = font_obj.get("/FirstChar", 0)
+        # last_char = font_obj.get("/LastChar", 255)
+        
+        width_map = {}
+        for i, w in enumerate(widths):
+            char_code = first_char + i
+            width_map[char_code] = w
+            
+        return width_map
+    except Exception as e:
+        logger.warning(f"Failed to extract resource widths: {e}")
+        return {}
 
+
+def calculate_text_width_in_units(text: str, width_map: Dict[int, int]) -> float:
+    """
+    Calculates total width of text using the font's width map.
+    Assumes standard encoding (Latin-1/ASCII) for simplicity as a start.
+    """
+    total_width = 0.0
+    # Fallback width if char not found (avg of typical digits ~500-600)
+    fallback = 500.0 
+    
+    # Try getting space width for fallback
+    if 32 in width_map:
+        fallback = width_map[32]
+        
+    for char in text:
+        # We assume 1-byte encoding for now (common in simple numeric fields)
+        # If text is unicode/complex, this might need mapping via ToUnicode or Encoding
+        try:
+            code = ord(char)
+            # If char is not in map (e.g. out of range), use fallback
+            w = width_map.get(code, fallback)
+            total_width += w
+        except:
+            total_width += fallback
+            
+    return total_width
+
+
+def process_stream_and_shift(page, stream_obj, edit_map: Dict[str, EditOperation], font_resources):
+    """
+    Parses stream, finds text, calculates shift using extracted font metrics, and edits.
+    """
     try:
-        instructions = pikepdf.parse_content_stream(page)
+        instructions = pikepdf.parse_content_stream(stream_obj)
         new_instructions = []
-        text_op_count = 0  # Count text operators found
+        modified = False
         
-        for operands, operator in instructions:
+        # Track current state
+        current_font_name = None
+        current_font_size = 10.0
+        current_font_widths = {}
+        
+        # Cache for looking up font resources
+        font_cache = {}
+
+        for i, (operands, operator) in enumerate(instructions):
             op_name = str(operator)
             
-            # Track text matrix (Tm sets absolute position)
-            if op_name == "Tm" and len(operands) >= 6:
+            # 1. Track Font Changes: /F1 12 Tf
+            if op_name == "Tf" and len(operands) >= 2:
+                current_font_name = str(operands[0]) # e.g. /F1
                 try:
-                    current_y = float(operands[5])  # f in [a b c d e f]
-                except:
-                    pass
-                # Always add Tm to output
-                new_instructions.append((operands, operator))
-            
-            # Track text position move (Td adds to position)
-            elif op_name == "Td" and len(operands) >= 2:
-                try:
-                    current_y += float(operands[1])  # ty in (tx, ty)
-                except:
-                    pass
-                # Always add Td to output
-                new_instructions.append((operands, operator))
-            
-            # Handle Tj (show text)
-            elif op_name == "Tj":
-                text_op_count += 1
-                if operands and len(operands) >= 1:
-                    raw = get_raw_bytes(operands[0])
-                    text = decode_for_match(raw)
-                    # Collect for diagnostics
-                    if text.strip():
-                        all_texts_found.append(text)
-                    new_raw = raw
-                    replaced_this = False
-                    shift_val = 0.0
-                    found_op = None
+                    current_font_size = float(operands[1])
                     
-                    # Check each edit target
-                    for old_txt, op_list in edit_map.items():
-                        if old_txt in text:
-                            # Find edit that matches by Y-coordinate
-                            for op in op_list:
-                                edit_key = id(op)
-                                if edit_key not in applied_edits:
-                                    # Convert canvas Y (from top) to PDF Y (from bottom)
-                                    # pdfjs sends: op.y = canvas Y (distance from top)
-                                    # pikepdf tracks: current_y = PDF Y (distance from bottom)
-                                    # So: pdf_y ≈ page_height - canvas_y
-                                    expected_pdf_y = page_height - op.y
-                                    y_diff = abs(current_y - expected_pdf_y)
-                                    
-                                    # Debug: show Y comparison
-                                    print(f"  FOUND '{old_txt}' -> current_y={current_y:.1f}, expected={expected_pdf_y:.1f}, diff={y_diff:.1f}")
-                                    
-                                    if y_diff < Y_TOLERANCE:
-                                        result = replace_preserving_encoding(new_raw, old_txt, op.new_text)
-                                        if result:
-                                            new_raw = result
-                                            applied_edits.add(edit_key)
-                                            replaced_this = True
-                                            modified = True
-                                            found_op = op
-                                            print(f"Y-matched '{old_txt}' at pdf_y={current_y:.1f} (expected={expected_pdf_y:.1f}, diff={y_diff:.1f}) -> '{op.new_text}'")
-                                            break
-                            if found_op:
+                    # Look up width table for this font
+                    if current_font_name not in font_cache:
+                        if font_resources and current_font_name in font_resources:
+                            font_obj = font_resources[current_font_name]
+                            font_cache[current_font_name] = get_font_width_map(font_obj)
+                        else:
+                            font_cache[current_font_name] = {}
+                    
+                    current_font_widths = font_cache[current_font_name]
+                    
+                except Exception as e:
+                    logger.warning(f"Error parsing Tf: {e}")
+
+            # 2. Handle Text Showing: Tj, TJ, ', "
+            # We normalize everything to a simple Tj for replacement
+            text_ops = ["Tj", "TJ", "'", '"']
+            if op_name in text_ops:
+                decoded_text = ""
+                
+                # Extract text based on operator type
+                if op_name == "Tj" and len(operands) > 0:
+                     decoded_text = decode_for_match(get_raw_bytes(operands[0]))
+                elif op_name == "TJ" and len(operands) > 0:
+                    # TJ takes an array of strings and numbers [ (A) 10 (B) ]
+                    # We rebuild the string ignoring the numbers (kerning)
+                    raw_acc = b""
+                    if isinstance(operands[0], pikepdf.Array):
+                        for item in operands[0]:
+                            if isinstance(item, pikepdf.String) or isinstance(item, bytes):
+                                raw_acc += get_raw_bytes(item)
+                    decoded_text = decode_for_match(raw_acc)
+                elif op_name == "'" and len(operands) > 0:
+                    decoded_text = decode_for_match(get_raw_bytes(operands[0]))
+                elif op_name == '"' and len(operands) >= 3:
+                     # " takes aw, ac, string. Text is the 3rd operand (index 2)
+                    decoded_text = decode_for_match(get_raw_bytes(operands[2]))
+
+                decoded_text = decoded_text.strip()
+                
+                if decoded_text in edit_map:
+                    edit_op = edit_map[decoded_text]
+                    
+                    # --- CALCULATE EXACT SHIFT ---
+                    old_w_units = calculate_text_width_in_units(edit_op.original_text, current_font_widths)
+                    new_w_units = calculate_text_width_in_units(edit_op.new_text, current_font_widths)
+                    diff_units = new_w_units - old_w_units
+                    shift_amount = (diff_units / 1000.0) * current_font_size
+                    
+                    logger.info(f"MATCH ({op_name}): '{decoded_text}' -> '{edit_op.new_text}'")
+                    logger.info(f"  Shift: {shift_amount:.4f} pt")
+                    
+                    # --- APPLY SHIFT TO PREVIOUS POSITIONING OPERATOR ---
+                    found_pos = False
+                    
+                    # Look backwards for positioning
+                    for j in range(len(new_instructions) - 1, -1, -1):
+                        prev_ops, prev_op = new_instructions[j]
+                        prev_op_str = str(prev_op)
+                        
+                        if prev_op_str in ["Td", "TD"]:
+                            # Explicit move: Adjust X
+                            old_tx = float(prev_ops[0])
+                            old_ty = float(prev_ops[1])
+                            new_instructions[j] = ([old_tx - shift_amount, old_ty], prev_op)
+                            found_pos = True
+                            break
+                        
+                        elif prev_op_str == "Tm":
+                            # Matrix move: Adjust e (index 4)
+                            if len(prev_ops) >= 6:
+                                floats = [float(x) for x in prev_ops]
+                                floats[4] -= shift_amount
+                                new_instructions[j] = (floats, prev_op)
+                                found_pos = True
                                 break
-                    
-                    # FALLBACK: If Y-matching failed but text was found, use first unapplied edit
-                    if not replaced_this:
-                        for old_txt, op_list in edit_map.items():
-                            if old_txt in text:
-                                for op in op_list:
-                                    edit_key = id(op)
-                                    if edit_key not in applied_edits:
-                                        result = replace_preserving_encoding(new_raw, old_txt, op.new_text)
-                                        if result:
-                                            new_raw = result
-                                            applied_edits.add(edit_key)
-                                            replaced_this = True
-                                            modified = True
-                                            found_op = op
-                                            print(f"FALLBACK matched '{old_txt}' -> '{op.new_text}' (Y-matching failed)")
-                                            break
-                                if found_op:
-                                    break
-                    
-                    if replaced_this and found_op:
-                        # Calculate shift needed for right alignment
-                        shift_val = calculate_visual_shift(found_op.original_text, found_op.new_text, found_op.font_size, found_op.width)
-                        
-                        if abs(shift_val) > 0.1:
-                            # Use TJ with kerning: [kerning_offset (text)] TJ
-                            # PDF spec: positive kerning = move LEFT (subtracted from position)
-                            # shift_val positive means text is longer, need to start more left
-                            kerning = int(shift_val * 1000 / found_op.font_size)
-                            
-                            # Create TJ array: [kerning, text]
-                            tj_array = pikepdf.Array([kerning, pikepdf.String(new_raw)])
-                            new_instructions.append(([tj_array], pikepdf.Operator("TJ")))
-                            print(f"TJ kerning: shift={shift_val:.2f}pt, kerning={kerning}, '{found_op.original_text}' -> '{found_op.new_text}'")
-                        else:
-                            # No shift needed, use simple Tj
-                            new_operands = [pikepdf.String(new_raw)]
-                            new_instructions.append((new_operands, operator))
-                            print(f"Replacing text: '{found_op.original_text}' -> '{found_op.new_text}' (no shift needed)")
-                        
-                    else:
-                        new_instructions.append((operands, operator))
-                else:
-                    new_instructions.append((operands, operator))
-                    
-            elif op_name == "TJ":
-                text_op_count += 1
-                if operands and len(operands) >= 1:
-                    arr = operands[0]
-                    if isinstance(arr, pikepdf.Array):
-                        new_arr = []
-                        arr_modified = False
-                        total_shift_val = 0.0
-                        
-                        for item in arr:
-                            if isinstance(item, pikepdf.String):
-                                raw = get_raw_bytes(item)
-                                text = decode_for_match(raw)
-                                new_raw = raw
-                                current_item_shift = 0.0
                                 
-                                # Check each edit target
-                                for old_txt, op_list in edit_map.items():
-                                    if old_txt in text:
-                                        # Find edit that matches by Y-coordinate
-                                        for op in op_list:
-                                            edit_key = id(op)
-                                            if edit_key not in applied_edits:
-                                                # Convert canvas Y to PDF Y
-                                                expected_pdf_y = page_height - op.y
-                                                y_diff = abs(current_y - expected_pdf_y)
-                                                if y_diff < Y_TOLERANCE:
-                                                    result = replace_preserving_encoding(new_raw, old_txt, op.new_text)
-                                                    if result:
-                                                        new_raw = result
-                                                        applied_edits.add(edit_key)
-                                                        arr_modified = True
-                                                        modified = True
-                                                        current_item_shift = calculate_visual_shift(old_txt, op.new_text, op.font_size, op.width)
-                                                        total_shift_val += current_item_shift
-                                                        print(f"TJ Y-matched '{old_txt}' at pdf_y={current_y:.1f} (expected={expected_pdf_y:.1f}) -> '{op.new_text}'")
-                                                        break
-                                
-                                new_arr.append(pikepdf.String(new_raw))
-                            else:
-                                new_arr.append(item)
-                        
-                        if arr_modified:
-                            # 1. Shift LEFT
-                            new_instructions.append(([-total_shift_val, 0], pikepdf.Operator("Td")))
-                            
-                            # 2. Modified TJ
-                            new_instructions.append(([pikepdf.Array(new_arr)], operator))
-                            
-                            # 3. Restore RIGHT
-                            new_instructions.append(([total_shift_val, 0], pikepdf.Operator("Td")))
-                        else:
-                            new_instructions.append((operands, operator))
+                        elif prev_op_str == "T*":
+                            # Newline (move down, reset x to 0 relative).
+                            # Can't modify T*, must insert Td(shift, 0) AFTER it.
+                            # Since we are modifying 'new_instructions', we insert at j+1
+                            # NOTE: Left shift = negative x. 
+                            # If we want to move left (because text got wider), we apply negative shift.
+                            # new_x = 0 - shift_amount
+                            new_instructions.insert(j + 1, ([-shift_amount, 0], pikepdf.Operator("Td")))
+                            found_pos = True
+                            break
+
+                        elif prev_op_str in ["BT"]: 
+                            break
+                    
+                    if not found_pos:
+                        # If no positioning found (e.g. right at start of BT, or implicit flow),
+                        # Insert Td immediately before this text op.
+                        # However, we are appending the text op later.
+                        # So we append Td to new_instructions NOW.
+                        logger.info("No pos op found, inserting Td before text.")
+                        new_instructions.append(([-shift_amount, 0], pikepdf.Operator("Td")))
+
+                    # --- REPLACE TEXT CONTENT ---
+                    # We normalize everything to 'Tj' for simplicity.
+                    # This avoids handling ' and " side-effects (like modifying leading) because 
+                    # we likely want to keep the line behavior same.
+                    # ACTUALLY: ' and " imply a MoveToNextLine. 
+                    # If we change ' to Tj, we LOSE the newline.
+                    # So if op was ' or ", we must output T* and then Tj.
+                    
+                    new_bytes = edit_op.new_text.encode('latin-1', errors='replace')
+                    new_string_op = pikepdf.String(new_bytes)
+                    
+                    if op_name == "'":
+                        # ' equals T* string Tj
+                        new_instructions.append(([], pikepdf.Operator("T*")))
+                        new_instructions.append(([new_string_op], pikepdf.Operator("Tj")))
+                    elif op_name == '"':
+                        # " equals aw ac T* string Tj ... complicated.
+                        # It sets spacing too.
+                        # For safety, let's keep it simply T* Tj assuming spacing isn't critical or we set it manually?
+                        # Or just use " with new text? " takes 3 args.
+                        # Let's preserve the operator if possible, or decompose.
+                        # Simplest: T* Tj.
+                         new_instructions.append(([], pikepdf.Operator("T*")))
+                         new_instructions.append(([new_string_op], pikepdf.Operator("Tj")))
                     else:
-                        new_instructions.append((operands, operator))
-                else:
-                    new_instructions.append((operands, operator))
-            else:
-                new_instructions.append((operands, operator))
-        
+                        # Tj or TJ -> Tj
+                        new_instructions.append(([new_string_op], pikepdf.Operator("Tj")))
+                        
+                    modified = True
+                    continue 
+
+            new_instructions.append((operands, operator))
+
         if modified:
-            new_stream = pikepdf.unparse_content_stream(new_instructions)
-            page.Contents = pdf.make_stream(new_stream)
-            
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
+            new_content_stream = pikepdf.unparse_content_stream(new_instructions)
+            stream_obj.write(new_content_stream)
+            return True
         return False
-    
-    # Diagnostic: Show what text we found (always if not modified)
-    if not modified:
-        numeric_texts = [t for t in all_texts_found if any(c.isdigit() for c in t)]
-        print(f"DIAGNOSTIC: text_ops={text_op_count}, texts_collected={len(all_texts_found)}, numeric={len(numeric_texts)}")
-        if numeric_texts:
-            print(f"  Numeric texts found:")
-            for t in numeric_texts[:15]:
-                print(f"    -> '{t}'")
-        else:
-            print(f"  NO numeric text found! PDF mungkin pakai CID/Identity-H font.")
-    
-    return modified
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "service": "pdf-editor-v14-td-wrapper"}
+    except Exception as e:
+        logger.error(f"Error processing stream: {e}")
+        return False
 
 
 @app.post("/edit")
@@ -351,73 +267,75 @@ async def edit_pdf(
     password: Optional[str] = Form(None)
 ):
     try:
-        # 1. Parse Edits
         try:
-            edit_list = json.loads(edits)
+            edit_data = json.loads(edits)
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON in edits")
+            raise HTTPException(status_code=400, detail="Invalid JSON in 'edits'")
+
+        # Group edits by page
+        edits_by_page = {}
+        for item in edit_data:
+            page_idx = item.get('pageIndex', 0)
+            if page_idx not in edits_by_page:
+                edits_by_page[page_idx] = []
+            edits_by_page[page_idx].append(EditOperation(item))
+
+        # Open PDF
+        pdf_bytes = await file.read()
+        try:
+            pdf = pikepdf.open(io.BytesIO(pdf_bytes), password=password or "")
+        except:
+            raise HTTPException(status_code=400, detail="Invalid PDF or password")
+
+        total_edits = 0
+        
+        for page_idx, ops in edits_by_page.items():
+            if page_idx >= len(pdf.pages):
+                continue
+                
+            page = pdf.pages[page_idx]
             
-        operations = [EditOperation(e) for e in edit_list]
-        if not operations:
-            raise HTTPException(status_code=400, detail="No edits provided")
+            # Map for quick lookup
+            edit_map = {op.original_text.strip(): op for op in ops}
+            
+            # Get Font Resources for this page
+            font_resources = {}
+            if "/Resources" in page and "/Font" in page["/Resources"]:
+                font_resources = page["/Resources"]["/Font"]
+            
+            # Process Contents (might be array or single stream)
+            contents = page.Contents
+            if isinstance(contents, pikepdf.Array):
+                for i in range(len(contents)):
+                    if process_stream_and_shift(page, contents[i], edit_map, font_resources):
+                        total_edits += 1
+            else:
+                if process_stream_and_shift(page, contents, edit_map, font_resources):
+                    total_edits += 1
 
-        # 2. Open PDF
-        pdf_content = await file.read()
-        try:
-            pdf = Pdf.open(io.BytesIO(pdf_content), password=password if password else "")
-        except pikepdf.PasswordError:
-             raise HTTPException(status_code=400, detail="Password incorrect or required")
-        
-        # 3. Group Edits by Page
-        ops_by_page: Dict[int, List[EditOperation]] = {}
-        for op in operations:
-             if op.page_index not in ops_by_page:
-                 ops_by_page[op.page_index] = []
-             ops_by_page[op.page_index].append(op)
-        
-        # 4. Apply Edits
-        total = 0
-        for page_idx, ops in ops_by_page.items():
-            if page_idx < len(pdf.pages):
-                page = pdf.pages[page_idx]
-                if replace_text_in_content_stream(pdf, page, ops):
-                    total += 1
-        
-        print(f"Modified {total} pages")
-        
-        # 5. Save Output
         output = io.BytesIO()
-        try:
-            # Try saving with original encryption (default)
-            pdf.save(output)
-        except Exception as e:
-            print(f"Save with strict encryption failed: {e}")
-            try:
-                # Fallback: Try removing encryption
-                print("Attempting to save with encryption=False...")
-                output = io.BytesIO() # Reset output
-                pdf.save(output, encryption=False)
-            except Exception as e2:
-                print(f"Save fallback failed: {e2}")
-                raise e2
+        pdf.save(output, compress_streams=False) # Keep streams uncompressed for debugging if needed
+        pdf_bytes_out = output.getvalue()
         
-        pdf.close()
+        logger.info(f"Processed {total_edits} edits using Exact Width Calculation")
         
-        output.seek(0)
-        return Response(
-            content=output.read(),
-            media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=edited.pdf"}
-        )
+        return Response(content=pdf_bytes_out, media_type="application/pdf")
 
-    except HTTPException:
-        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Python Service Error: {str(e)}")
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+    except Exception as e:
+        logger.error(f"HTML conversion error: {str(e)}")
+        # Return 500 with detail
+        return Response(
+            content=json.dumps({"error": str(e)}),
+            status_code=500,
+            media_type="application/json"
+        )
 
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)

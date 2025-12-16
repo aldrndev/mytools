@@ -7,6 +7,8 @@ import type {
   CalculatedDeductions,
   PayrollPeriod,
   TemplateId,
+  SlipTheme,
+  Orientation,
 } from "@pdf-editor/shared";
 
 export type WizardStep =
@@ -27,6 +29,8 @@ interface SalarySlipState {
   earnings: Earnings;
   deductionsConfig: DeductionsConfig;
   selectedTemplate: TemplateId;
+  selectedTheme: SlipTheme;
+  orientation: Orientation;
 
   // Calculated values
   grossSalary: number;
@@ -48,6 +52,8 @@ interface SalarySlipState {
   setEarnings: (earnings: Partial<Earnings>) => void;
   setDeductionsConfig: (config: Partial<DeductionsConfig>) => void;
   setSelectedTemplate: (template: TemplateId) => void;
+  setSelectedTheme: (theme: SlipTheme) => void;
+  setOrientation: (orientation: Orientation) => void;
 
   setCalculatedValues: (
     gross: number,
@@ -124,7 +130,9 @@ export const useSalarySlipStore = create<SalarySlipState>((set) => ({
   period: initialPeriod,
   earnings: initialEarnings,
   deductionsConfig: initialDeductionsConfig,
-  selectedTemplate: "modern",
+  selectedTemplate: "formal_standar",
+  selectedTheme: "default",
+  orientation: "portrait",
   grossSalary: 0,
   netSalary: 0,
   calculatedDeductions: null,
@@ -171,6 +179,8 @@ export const useSalarySlipStore = create<SalarySlipState>((set) => ({
     })),
 
   setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+  setSelectedTheme: (theme) => set({ selectedTheme: theme }),
+  setOrientation: (orientation) => set({ orientation }),
 
   setCalculatedValues: (gross, net, deductions) =>
     set({
@@ -191,7 +201,9 @@ export const useSalarySlipStore = create<SalarySlipState>((set) => ({
       period: initialPeriod,
       earnings: initialEarnings,
       deductionsConfig: initialDeductionsConfig,
-      selectedTemplate: "modern",
+      selectedTemplate: "formal_standar",
+      selectedTheme: "default",
+      orientation: "portrait",
       grossSalary: 0,
       netSalary: 0,
       calculatedDeductions: null,

@@ -52,10 +52,12 @@ export function LandingPage() {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <FileEdit className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-3">PDF Editor</h2>
+              <h2 className="text-2xl font-bold text-white mb-3">
+                Bank Statement Editor
+              </h2>
               <p className="text-dark-300 mb-6">
-                Edit dokumen PDF seperti bank statement, invoice, atau dokumen
-                lainnya. Ubah teks langsung sambil mempertahankan format asli.
+                Edit Bank Statement anda dengan mudah. Pertahankan format asli
+                dan kalkulasi otomatis.
               </p>
               <div className="flex items-center text-primary-400 font-medium group-hover:gap-3 gap-2 transition-all">
                 <span>Mulai Edit</span>

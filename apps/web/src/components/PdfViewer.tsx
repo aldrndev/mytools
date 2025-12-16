@@ -224,10 +224,10 @@ export function EditableTextLayer({
                   border: "none",
                   borderRadius: "2px",
                   outline: "none",
-                  width: isNumeric ? "auto" : "100%", // Allow auto width for right align to let it grow? No, container grows.
-                  minWidth: "100%", // Input should fill container
+                  width: isNumeric ? "auto" : "100%",
+                  minWidth: "100%",
                   textAlign: isNumeric ? "right" : "left",
-                  padding: 0, // Reset padding again for standard font
+                  padding: 0,
                   margin: 0,
                 }}
               />

@@ -63,6 +63,8 @@ export async function generateSalarySlip(
       earnings,
       deductionsConfig,
       templateId,
+      theme,
+      orientation,
     } = parseResult.data;
 
     // Calculate salary slip
@@ -75,7 +77,7 @@ export async function generateSalarySlip(
     );
 
     // Generate HTML
-    const html = generateSalarySlipHTML(result, templateId);
+    const html = generateSalarySlipHTML(result, templateId, theme, orientation);
 
     // Save HTML file
     await ensureOutputDir();
@@ -147,6 +149,8 @@ export async function previewSalarySlip(
       earnings,
       deductionsConfig,
       templateId,
+      theme,
+      orientation,
     } = parseResult.data;
 
     // Calculate salary slip
@@ -159,7 +163,13 @@ export async function previewSalarySlip(
     );
 
     // Generate HTML
-    const html = generateSalarySlipHTML(result, templateId);
+    const html = generateSalarySlipHTML(
+      result,
+      templateId,
+      theme,
+      orientation,
+      true
+    );
 
     // Return HTML directly for preview
     return reply.header("Content-Type", "text/html").send(html);

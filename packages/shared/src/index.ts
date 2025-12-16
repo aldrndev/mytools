@@ -81,6 +81,8 @@ export {
   PayrollPeriodSchema,
   SalarySlipDataSchema,
   TemplateIdSchema,
+  SlipThemeSchema,
+  OrientationSchema,
   GenerateSalarySlipRequestSchema,
   // Types
   type PTKPStatus,
@@ -94,6 +96,8 @@ export {
   type PayrollPeriod,
   type SalarySlipData,
   type TemplateId,
+  type SlipTheme,
+  type Orientation,
   type GenerateSalarySlipRequest,
 } from "./payroll.schema";
 

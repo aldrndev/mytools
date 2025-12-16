@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Eye, ArrowLeft, Download, RefreshCw, Printer } from "lucide-react";
+import { Eye, ArrowLeft, RefreshCw, Printer } from "lucide-react";
 import { useSalarySlipStore } from "@/stores/salarySlipStore";
 import { formatRupiah } from "@pdf-editor/shared";
 
@@ -17,6 +17,8 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
     earnings,
     deductionsConfig,
     selectedTemplate,
+    selectedTheme,
+    orientation,
     grossSalary,
     netSalary,
     calculatedDeductions,
@@ -32,13 +34,22 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
     setError(null);
 
     try {
+      // Legacy state handling: default to formal_standar for old template IDs
+      const safeTemplateId = (selectedTemplate as string).startsWith(
+        "indonesian"
+      )
+        ? "formal_standar"
+        : selectedTemplate;
+
       const requestBody = {
         company,
         employee,
         period,
         earnings,
         deductionsConfig,
-        templateId: selectedTemplate,
+        templateId: safeTemplateId,
+        theme: "default", // Always use formal black theme
+        orientation,
       };
 
       console.log("Preview request body:", requestBody);
@@ -76,13 +87,22 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
     setError(null);
 
     try {
+      // Legacy state handling: default to formal_standar for old template IDs
+      const safeTemplateId = (selectedTemplate as string).startsWith(
+        "indonesian"
+      )
+        ? "formal_standar"
+        : selectedTemplate;
+
       const requestBody = {
         company,
         employee,
         period,
         earnings,
         deductionsConfig,
-        templateId: selectedTemplate,
+        templateId: safeTemplateId,
+        theme: "default", // Always use formal black theme
+        orientation,
       };
 
       console.log("Generate request body:", requestBody);
@@ -106,31 +126,16 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
       const data = await response.json();
       console.log("Generate success:", data);
 
-      // Refresh preview after generate
-      await fetchPreview();
+      if (data.success && data.data.downloadUrl) {
+        // Open the HTML file in a new tab for printing/saving
+        window.open(`${API_BASE}${data.data.downloadUrl}`, "_blank");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to generate";
       console.error("Generate failed:", message);
       setError(message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDownload = () => {
-    if (previewHtml) {
-      // Create a blob and download as HTML file
-      const blob = new Blob([previewHtml], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `slip-gaji-${employee.employeeId}-${period.year}-${String(
-        period.month
-      ).padStart(2, "0")}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     }
   };
 
@@ -153,7 +158,7 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
   useEffect(() => {
     fetchPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplate]);
+  }, [selectedTemplate, selectedTheme, orientation]);
 
   const MONTHS = [
     "Januari",
@@ -219,7 +224,7 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
         </div>
       </div>
 
-      {/* Deductions Breakdown - Hide on very small screens or make scrollable? Grid cols 2 is good for mobile */}
+      {/* Deductions Breakdown */}
       {calculatedDeductions && (
         <div className="bg-dark-800/30 rounded-xl p-4 mb-6 sm:mb-8 border border-dark-600">
           <h4 className="font-medium text-white mb-3">Rincian Potongan</h4>
@@ -309,14 +314,7 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
             />
             Regenerate
           </button>
-          <button
-            onClick={handleDownload}
-            disabled={!previewHtml || isLoading}
-            className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-medium bg-dark-700 text-white hover:bg-dark-600 transition disabled:opacity-50 w-full sm:w-auto"
-          >
-            <Download className="w-5 h-5" />
-            HTML
-          </button>
+
           <button
             onClick={handlePrint}
             disabled={!previewHtml || isLoading}

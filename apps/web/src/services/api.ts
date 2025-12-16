@@ -39,6 +39,7 @@ export interface EditRequest {
     height: number;
     fontSize: number;
     fontName: string;
+    shift?: number;
   }>;
   password?: string;
 }

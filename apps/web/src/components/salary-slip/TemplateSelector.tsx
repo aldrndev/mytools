@@ -1,4 +1,4 @@
-import { Palette, ArrowLeft, Check } from "lucide-react";
+import { Palette, ArrowLeft } from "lucide-react";
 import { useSalarySlipStore } from "@/stores/salarySlipStore";
 import type { TemplateId } from "@pdf-editor/shared";
 
@@ -7,40 +7,29 @@ interface TemplateSelectorProps {
   onPrev: () => void;
 }
 
-const TEMPLATES: {
-  id: TemplateId;
-  name: string;
-  description: string;
-  preview: string; // CSS gradient for preview
-}[] = [
+const TEMPLATES: { id: TemplateId; name: string; desc: string }[] = [
+  { id: "formal_standar", name: "Standar", desc: "Format dasar slip gaji" },
+  { id: "formal_bordered", name: "Berbingkai", desc: "Dengan border lengkap" },
+  { id: "formal_compact", name: "Kompak", desc: "Format hemat ruang" },
+  { id: "formal_detailed", name: "Detail", desc: "Informasi lengkap" },
   {
-    id: "modern",
-    name: "Modern Professional",
-    description: "Desain modern dengan gradient dan card-based layout",
-    preview: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+    id: "formal_executive",
+    name: "Eksekutif",
+    desc: "Format ringkas profesional",
   },
-  {
-    id: "classic",
-    name: "Corporate Classic",
-    description: "Desain formal tradisional dengan tabel berborder",
-    preview: "linear-gradient(135deg, #374151, #1f2937)",
-  },
-  {
-    id: "minimal",
-    name: "Minimal Clean",
-    description: "Desain minimalis dengan fokus pada whitespace",
-    preview: "linear-gradient(135deg, #f8fafc, #e2e8f0)",
-  },
-  {
-    id: "indonesian",
-    name: "Indonesian Standard",
-    description: "Format standar slip gaji Indonesia",
-    preview: "linear-gradient(135deg, #059669, #047857)",
-  },
+  { id: "formal_simple", name: "Simpel", desc: "Minimalis tanpa hiasan" },
+  { id: "formal_corporate", name: "Korporat", desc: "Gaya perusahaan besar" },
+  { id: "formal_classic", name: "Klasik", desc: "Tampilan tradisional" },
+  { id: "formal_clean", name: "Bersih", desc: "Ruang putih lega" },
+  { id: "formal_professional", name: "Profesional", desc: "Kesan formal kuat" },
+  { id: "formal_elegant", name: "Elegan", desc: "Sentuhan tipografi halus" },
+  { id: "formal_business", name: "Bisnis", desc: "Format standar bisnis" },
+  { id: "formal_structured", name: "Terstruktur", desc: "Grid yang rapi" },
 ];
 
 export function TemplateSelector({ onNext, onPrev }: TemplateSelectorProps) {
-  const { selectedTemplate, setSelectedTemplate } = useSalarySlipStore();
+  const { selectedTemplate, setSelectedTemplate, orientation, setOrientation } =
+    useSalarySlipStore();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,68 +44,100 @@ export function TemplateSelector({ onNext, onPrev }: TemplateSelectorProps) {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-white">Pilih Template</h2>
-          <p className="text-dark-400">
-            Pilih desain slip gaji yang sesuai dengan kebutuhan
-          </p>
+          <p className="text-dark-400">Pilih layout dan orientasi kertas</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          {TEMPLATES.map((template) => {
-            const isSelected = selectedTemplate === template.id;
-
-            return (
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Template Selection */}
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-4">
+            Layout Template
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {TEMPLATES.map((t) => (
               <button
-                key={template.id}
+                key={t.id}
                 type="button"
-                onClick={() => setSelectedTemplate(template.id)}
-                className={`text-left p-4 rounded-xl border-2 transition-all ${
-                  isSelected
+                onClick={() => setSelectedTemplate(t.id)}
+                className={`p-3 rounded-lg border-2 transition-all text-left ${
+                  selectedTemplate === t.id
                     ? "border-primary-500 bg-primary-500/10"
                     : "border-dark-600 bg-dark-800/50 hover:border-dark-500"
                 }`}
               >
-                {/* Preview */}
-                <div
-                  className="h-32 rounded-lg mb-4 flex items-center justify-center relative overflow-hidden"
-                  style={{ background: template.preview }}
-                >
-                  {/* Mockup content */}
-                  <div className="absolute inset-4 bg-white/10 backdrop-blur rounded-md">
-                    <div className="p-3 space-y-2">
-                      <div className="h-2 bg-white/30 rounded w-1/2" />
-                      <div className="h-1.5 bg-white/20 rounded w-3/4" />
-                      <div className="h-1.5 bg-white/20 rounded w-2/3" />
-                      <div className="mt-3 flex gap-2">
-                        <div className="h-8 bg-white/20 rounded flex-1" />
-                        <div className="h-8 bg-white/20 rounded flex-1" />
-                      </div>
-                    </div>
-                  </div>
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Info */}
-                <h3
-                  className={`font-semibold mb-1 ${
-                    isSelected ? "text-primary-400" : "text-white"
+                <span
+                  className={`text-sm font-semibold block ${
+                    selectedTemplate === t.id
+                      ? "text-primary-400"
+                      : "text-white"
                   }`}
                 >
-                  {template.name}
-                </h3>
-                <p className="text-sm text-dark-400">{template.description}</p>
+                  {t.name}
+                </span>
+                <span className="text-xs text-dark-400 line-clamp-2">
+                  {t.desc}
+                </span>
               </button>
-            );
-          })}
+            ))}
+          </div>
+        </div>
+
+        {/* Orientation Selection */}
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-4">
+            Orientasi Kertas
+          </h3>
+          <div className="grid grid-cols-2 gap-4 max-w-sm">
+            <button
+              type="button"
+              onClick={() => setOrientation("portrait")}
+              className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${
+                orientation === "portrait"
+                  ? "border-primary-500 bg-primary-500/10"
+                  : "border-dark-600 bg-dark-800/50 hover:border-dark-500"
+              }`}
+            >
+              <div className="w-10 h-14 border-2 border-current rounded flex items-center justify-center opacity-50">
+                <span className="text-xs">A4</span>
+              </div>
+              <span
+                className={`font-medium ${
+                  orientation === "portrait"
+                    ? "text-primary-400"
+                    : "text-dark-300"
+                }`}
+              >
+                Portrait
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrientation("landscape")}
+              className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${
+                orientation === "landscape"
+                  ? "border-primary-500 bg-primary-500/10"
+                  : "border-dark-600 bg-dark-800/50 hover:border-dark-500"
+              }`}
+            >
+              <div className="w-14 h-10 border-2 border-current rounded flex items-center justify-center opacity-50">
+                <span className="text-xs">A4</span>
+              </div>
+              <span
+                className={`font-medium ${
+                  orientation === "landscape"
+                    ? "text-primary-400"
+                    : "text-dark-300"
+                }`}
+              >
+                Landscape
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
-        <div className="flex flex-col-reverse sm:flex-row justify-between pt-4 border-t border-dark-700 gap-4 sm:gap-0">
+        <div className="flex flex-col-reverse sm:flex-row justify-between pt-4 border-t border-dark-700 gap-4 sm:gap-0 mt-8">
           <button
             type="button"
             onClick={onPrev}

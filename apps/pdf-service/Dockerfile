@@ -7,13 +7,26 @@ RUN apt-get update && apt-get install -y \
     libqpdf-dev \
     gcc \
     g++ \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    libffi-dev \
+    fonts-liberation \
+    fonts-dejavu-core \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
+# Install python deps
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Expose port
 EXPOSE 3002
 
-CMD ["python", "main.py"]
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--reload"]
