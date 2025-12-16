@@ -1,0 +1,29 @@
+FROM node:20-slim
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /app
+
+# Copy root config files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy shared packages
+COPY packages/shared ./packages/shared
+
+# Copy backend app
+COPY apps/backend ./apps/backend
+
+# Install dependencies (including devDependencies for tsx)
+RUN pnpm install --frozen-lockfile
+
+# Set workdir to backend
+WORKDIR /app/apps/backend
+
+# Expose port
+EXPOSE 3001
+
+# Run with tsx (ensure tsx is available from devDependencies)
+# We use 'node --import tsx/esm' for cleaner standard execution or just tsx utility
+CMD ["pnpm", "exec", "tsx", "src/app.ts"]

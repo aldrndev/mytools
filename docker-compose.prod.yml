@@ -1,0 +1,27 @@
+services:
+  pdf-service:
+    build:
+      context: ./apps/pdf-service
+      dockerfile: Dockerfile.prod
+    container_name: bank_pdf_service
+    ports:
+      - "3002:3002"
+    restart: always
+    environment:
+      - PORT=3002
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile.prod
+    container_name: bank_backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PDF_SERVICE_URL=http://pdf-service:3002
+      - PORT=3001
+      - CORS_ORIGIN=https://your-frontend-domain.com
+      # Add other env vars here or use env_file
+    depends_on:
+      - pdf-service
+    restart: always
