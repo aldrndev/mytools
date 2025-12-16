@@ -70,8 +70,39 @@ export function SlipPreview({ onPrev }: SlipPreviewProps) {
         throw new Error(errorMessage);
       }
 
-      const html = await response.text();
-      setPreviewHtml(html);
+      const rawHtml = await response.text();
+
+      // Inject responsive scaling for mobile/screen preview
+      const baseWidth = orientation === "landscape" ? 1123 : 794; // A4 px at 96dpi
+      const responsiveStyle = `
+        <style>
+          @media screen {
+            html {
+              background: #f3f4f6;
+              padding: 20px 0;
+              width: 100%;
+              height: 100%;
+              display: flex;
+              justify-content: center;
+            }
+            body {
+              transform-origin: top center;
+              /* Scale content to fit viewport width with padding */
+              transform: scale(min(1, calc((100vw - 40px) / ${baseWidth})));
+              width: ${baseWidth}px;
+              margin: 0 auto !important;
+              background: white;
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+              /* Ensure height grows with content */
+              height: auto !important; 
+              min-height: 100vh;
+            }
+          }
+        </style>
+      `;
+
+      const finalHtml = rawHtml.replace("</head>", `${responsiveStyle}</head>`);
+      setPreviewHtml(finalHtml);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to generate preview";
