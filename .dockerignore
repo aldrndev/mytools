@@ -1,0 +1,8 @@
+node_modules
+.git
+.turbo
+dist
+build
+.DS_Store
+.env.local
+.env

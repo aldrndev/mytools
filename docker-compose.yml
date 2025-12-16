@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  pdf-service:
+    build:
+      context: ./apps/pdf-service
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./apps/pdf-service:/app # Mount local code for hot reload
+    command: uvicorn main:app --host 0.0.0.0 --port 3002 --reload
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PDF_SERVICE_URL=http://pdf-service:3002
+      - PORT=3001
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - pdf-service
+    restart: always
