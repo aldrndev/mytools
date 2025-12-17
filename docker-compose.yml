@@ -22,6 +22,8 @@ services:
     volumes:
       - ./apps/backend/src:/app/apps/backend/src # Mount backend source
       - ./packages/shared/src:/app/packages/shared/src # Mount shared package
+      - ./apps/backend/temp:/app/apps/backend/temp # Mount temp dir for debugging
+      - ./output:/app/apps/backend/output # Mount output dir to root output folder
     command: pnpm backend
     depends_on:
       - pdf-service
