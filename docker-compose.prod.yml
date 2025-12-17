@@ -22,6 +22,9 @@ services:
       - PORT=3001
       - CORS_ORIGIN=https://mytools-web.vercel.app
       # Add other env vars here or use env_file
+    volumes:
+      - ./apps/backend/temp:/app/apps/backend/temp
+      - ./output:/app/apps/backend/output
     depends_on:
       - pdf-service
     restart: always
