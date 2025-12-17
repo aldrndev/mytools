@@ -14,6 +14,7 @@
     "@pdf-editor/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.8",
     "@types/react-router-dom": "^5.3.3",
+    "@vercel/analytics": "^1.6.1",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^4.9.155",
